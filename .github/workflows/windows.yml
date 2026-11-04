@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        architecture: ${{ fromJSON(inputs.architecture == 'arm64' && '["arm64"]' || inputs.architecture == 'x64' && '["x64"]' || '["x64","arm64"]') }}
+        architecture: ${{ fromJSON(inputs.architecture == 'arm64' && '["arm64"]' || inputs.architecture == 'all' && '["x64","arm64"]' || '["x64"]') }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -177,6 +177,8 @@ jobs:
             -VcpkgInstalledRoot "$env:VCPKG_INSTALLATION_ROOT\installed\${{ matrix.architecture }}-windows" `
             -TargetTriple $targetTriple -LibraryPaths ($env:TARGET_LIBRARY_PATHS -split ";"))
           $buildArguments = @($swiftArguments) + @("-c", "release")
+          swift test @buildArguments --filter BridgeMCPCompatibilityTests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           swift build @buildArguments --product codex-bridge-windows-app
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           swift build @buildArguments --product codex-bridge-service

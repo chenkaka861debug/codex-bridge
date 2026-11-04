@@ -396,6 +396,10 @@ let package = Package(
       ] + linuxDesktopDependencies
     ),
     .target(name: "BridgeWindowsShell", dependencies: ["BridgeDesktopShell"]),
+    .testTarget(
+      name: "BridgeMCPCompatibilityTests",
+      dependencies: ["BridgeMCP", .product(name: "MCP", package: "swift-sdk")]
+    ),
     .executableTarget(
       name: "CodexBridgeServiceExecutable",
       dependencies: ["BridgeServiceHost"]

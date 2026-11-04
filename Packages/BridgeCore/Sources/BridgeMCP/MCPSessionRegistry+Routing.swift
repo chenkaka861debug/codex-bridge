@@ -83,7 +83,7 @@ extension MCPSessionRegistry {
         requestTask: requestTask
       )
       let response = await withTaskCancellationHandler {
-        addingModernServerInfo(to: await requestTask.value)
+        adaptingModernResponse(await requestTask.value, for: request)
       } onCancel: {
         requestTask.cancel()
         Task { await createdServer.stop() }
@@ -196,12 +196,25 @@ extension MCPSessionRegistry {
     .error(statusCode: 400, .serverError(code: -32_020, message: message))
   }
 
-  func addingModernServerInfo(to response: HTTPResponse) -> HTTPResponse {
+  func adaptingModernResponse(_ response: HTTPResponse, for request: HTTPRequest) -> HTTPResponse {
     guard case .data(let data, let headers) = response,
       var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       var result = object["result"] as? [String: Any]
     else {
       return response
+    }
+    // The vendored SDK emits legacy result objects. Only adapt successful
+    // modern responses, preserving any explicit multi-round-trip result type.
+    if result["resultType"] == nil { result["resultType"] = "complete" }
+    if result["resultType"] as? String == "complete",
+      let body = request.body,
+      let requestObject = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+      let method = requestObject["method"] as? String,
+      ["tools/list", "prompts/list", "resources/list", "resources/templates/list", "resources/read"]
+        .contains(method)
+    {
+      if result["ttlMs"] == nil { result["ttlMs"] = 0 }
+      if result["cacheScope"] == nil { result["cacheScope"] = "private" }
     }
     var metadata = result["_meta"] as? [String: Any] ?? [:]
     metadata["io.modelcontextprotocol/serverInfo"] = [
@@ -230,6 +243,8 @@ extension MCPSessionRegistry {
       + "executed on the user's machine after local approval."
     let result: [String: Any] = [
       "resultType": "complete",
+      "ttlMs": 0,
+      "cacheScope": "private",
       "supportedVersions": [Self.modernProtocolVersion, Version.latest],
       "capabilities": ["tools": [:], "resources": [:]],
       "_meta": [
