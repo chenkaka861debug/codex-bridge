@@ -18,6 +18,12 @@ enum BridgeDesktopCommandRouter {
       model.appUpdater.deferUpdate()
     case .cancelAppUpdate:
       model.appUpdater.cancel()
+    case .messageCenterRefresh, .messageCenterLoadMore, .messageCenterSetVisible,
+      .messageCenterMarkRead,
+      .messageCenterMarkAllRead, .messageCenterSubmitFeedback, .messageCenterReply,
+      .messageCenterSelectAttachments, .messageCenterRemoveAttachment,
+      .messageCenterPreviewAttachment, .messageCenterOpenAttachment:
+      handleMessageCenter(envelope, model: model)
     case .saveDirectConfiguration:
       model.saveDirectConfiguration(envelope.payload.value)
     case .checkDirectCommand:
@@ -78,12 +84,15 @@ enum BridgeDesktopCommandRouter {
       else { return }
       model.openTask(taskID)
       model.selection = .workbench
+    case .openWorkbenchSession:
+      guard validatedID(envelope.payload.sessionID) != nil else { return }
+      model.selection = .workbench
     case .browserBack, .browserForward, .browserReload, .selectBrowserSite, .setBrowserEnabled,
-      .openBrowserExternally, .loadEarlierConversation, .refreshConversation,
+      .openBrowserExternally, .loadEarlierConversation, .refreshConversation, .setWorkbenchPanes,
       .setWorkbenchPermissionMode, .selectTask, .refreshTasks, .interruptTask,
       .searchTaskHistory, .selectTaskHistory,
       .stopTask, .deleteTask, .deleteSession, .steerTask, .resumeTask, .restartTask, .handoffTask,
-      .submitDSHTask, .workbenchWorkspace,
+      .submitDSHTask, .submitAgentTask, .embeddedDSH, .workbenchWorkspace,
       .resolveApproval, .resolveDirectApproval:
       handleWorkbench(envelope, model: model)
     case .selectProject, .refreshProjects, .registerProject, .removeProject,
@@ -93,7 +102,8 @@ enum BridgeDesktopCommandRouter {
     case .selectLog, .refreshLogs, .setLogSearch, .setLogProjectFilter,
       .setLogKindFilter, .copyLogs:
       handleLogs(envelope, model: model)
-    case .setMCPClientEnabled, .setMCPClientExposure, .copyMCPClientConfiguration,
+    case .setMCPClientEnabled, .refreshMCPClients, .setMCPClientExposure,
+      .copyMCPClientConfiguration,
       .configureGeminiCloud, .copyGeminiCloudConfiguration, .refreshGeminiCloud,
       .copyLocalMCPEndpoint,
       .rotateMCPClientCredential, .rotateLocalMCPEndpoint,
@@ -101,7 +111,8 @@ enum BridgeDesktopCommandRouter {
       .setDeepSeekHarnessMCPServerEnabled, .setAgentMCPScope, .configureTunnel, .setTunnelHTTPProxy,
       .connectTunnel, .disconnectTunnel, .clearTunnel, .connectAgent, .registerAgent,
       .beginAgentRegistration, .saveQoderRuntimeSettings,
-      .beginAgentSetup, .refreshAgentSetups, .continueAgentSetup, .cancelAgentSetup,
+      .beginAgentSetup, .refreshAgentSetups, .continueAgentSetup, .probeAgentSetupLogin,
+      .cancelAgentSetup,
       .openAgentSetupLogin,
       .selectAgent,
       .setAgentEnabled, .reprobeAgent, .removeAgent, .refreshAgentModels:
@@ -113,9 +124,9 @@ enum BridgeDesktopCommandRouter {
       handleNativePermissions(envelope, model: model)
     case .saveAgentDefault, .setExecutionModel, .setExecutionEffort, .setAccessMode,
       .setFastMode,
-      .setDirectApprovalMode, .setTaskStartApprovalMode, .saveSettings,
+      .setDirectApprovalMode, .setTaskStartApprovalMode, .setProjectWriteConcurrency, .saveSettings,
       .saveCustomInstructions, .registerService, .unregisterService,
-      .setKeepServiceRunning, .updateBrowserViewport:
+      .setKeepServiceRunning, .setWorkbenchEnabled, .updateBrowserViewport:
       handleSettings(envelope, model: model)
     case .dismissFeedback:
       return

@@ -93,6 +93,15 @@
       #endif
     }
 
+    static func openLocalImage(_ url: URL) {
+      guard url.isFileURL else { return }
+      #if os(Windows)
+        WindowsExternalURLHost.open(url.path)
+      #else
+        LinuxDesktopHost.openLocalImage(url)
+      #endif
+    }
+
     static func chooseProjectDirectory(
       completion: @escaping @Sendable (String, String) -> Void
     ) {
@@ -116,6 +125,24 @@
       #endif
     }
 
+    static func chooseWorkspaceDirectory(completion: @escaping @Sendable (String?) -> Void) {
+      #if os(Windows)
+        WindowsDesktopUIHostActions.chooseWorkspaceDirectory(completion: completion)
+      #else
+        LinuxDesktopHost.chooseFileIncludingCancellation(
+          title: "打开工作文件夹", directory: true, completion: completion)
+      #endif
+    }
+
+    static func chooseSkillDirectory(completion: @escaping @Sendable (String?) -> Void) {
+      #if os(Windows)
+        WindowsDesktopUIHostActions.chooseWorkspaceDirectory(completion: completion)
+      #else
+        LinuxDesktopHost.chooseFileIncludingCancellation(
+          title: "导入技能", directory: true, completion: completion)
+      #endif
+    }
+
     static func chooseConfigFile(
       title: String = "选择 Agent 配置文件",
       completion: @escaping @Sendable (String) -> Void
@@ -124,6 +151,25 @@
         WindowsDesktopUIHostActions.chooseConfigFile(title: title, completion: completion)
       #else
         LinuxDesktopHost.chooseFile(title: title, directory: false, completion: completion)
+      #endif
+    }
+
+    static func chooseImageFile(
+      title: String = "选择项目图片", completion: @escaping @Sendable (String?) -> Void
+    ) {
+      #if os(Windows)
+        WindowsDesktopUIHostActions.chooseImageFile(title: title, completion: completion)
+      #else
+        LinuxDesktopHost.chooseFileIncludingCancellation(
+          title: title, directory: false, completion: completion)
+      #endif
+    }
+
+    static func chooseSaveFile(completion: @escaping @Sendable (String?) -> Void) {
+      #if os(Windows)
+        WindowsDesktopUIHostActions.chooseSaveFile(completion: completion)
+      #else
+        LinuxDesktopHost.chooseSaveFile(completion: completion)
       #endif
     }
   }

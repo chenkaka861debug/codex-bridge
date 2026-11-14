@@ -9,14 +9,17 @@ extension BridgeServiceAppModel {
     guard !started, !stopped else { return }
     started = true
     startAppUpdateCheck()
-    registrationStatus = registration.status
-    switch registrationStatus {
+    startMessageCenter()
+    let status = await resolveRegistrationStatus(reprobe: true)
+    guard !stopped else { return }
+    switch status {
     case .enabled:
       await connect(includeCatalog: true)
     case .notRegistered:
       await enableBackgroundService()
     case .requiresApproval:
       connectionState = .requiresApproval
+      startPolling()
     case .notFound:
       connectionState = .unavailable
       errorMessage = "App Bundle 中没有找到 Codex Bridge 后台 Service。"
@@ -27,6 +30,7 @@ extension BridgeServiceAppModel {
     guard !stopped else { return }
     stopped = true
     appUpdater.cancel()
+    stopMessageCenter()
     started = false
     pollingTask?.cancel()
     pollingTask = nil
@@ -37,17 +41,34 @@ extension BridgeServiceAppModel {
     connectionState = .idle
   }
 
-  public func shutdownForApplicationTermination() async {
+  @discardableResult
+  public func shutdownForApplicationTermination() async -> Bool {
     if !keepServiceRunningAfterAppExit {
+      let processIDs: [Int32]
+      do {
+        processIDs = try await registration.processIDsForShutdown()
+      } catch {
+        errorMessage = "无法检查后台服务退出状态：\(error.localizedDescription)"
+        return false
+      }
       await disableBackgroundService()
+      guard errorMessage == nil else { return false }
+      do {
+        try await registration.waitForShutdown(processIDs: processIDs)
+      } catch {
+        errorMessage = "后台服务尚未结束，请稍后重试。"
+        return false
+      }
     }
     await shutdownUI()
+    return true
   }
 
   func enableBackgroundService() async {
     guard !stopped else { return }
     errorMessage = nil
-    registrationStatus = registration.status
+    await resolveRegistrationStatus(reprobe: true)
+    guard !stopped else { return }
     if registrationStatus == .enabled {
       await connect(includeCatalog: true)
       return
@@ -57,7 +78,7 @@ extension BridgeServiceAppModel {
     do {
       try registration.register()
     } catch {
-      registrationStatus = registration.status
+      await resolveRegistrationStatus(reprobe: true)
       guard registrationStatus == .enabled else {
         connectionState =
           registrationStatus == .requiresApproval
@@ -68,12 +89,13 @@ extension BridgeServiceAppModel {
       }
     }
 
-    registrationStatus = registration.status
+    await resolveRegistrationStatus(reprobe: true)
     guard registrationStatus == .enabled else {
       connectionState =
         registrationStatus == .requiresApproval
         ? .requiresApproval
         : .unavailable
+      startPolling()
       return
     }
     await connect(includeCatalog: true)
@@ -86,14 +108,15 @@ extension BridgeServiceAppModel {
     closeConversation()
     await closeClient()
     do {
-      if registration.status != .notRegistered {
+      if await registration.probeStatus() != .notRegistered {
         try await registration.unregister()
       }
-      registrationStatus = registration.status
+      await resolveRegistrationStatus(reprobe: true)
       connectionState = .idle
       serviceStatus = nil
       projects = []
       projectPaths = [:]
+      defaultProjectID = nil
       agentProviders = []
       agentInstallations = []
       agentModelOptions = []
@@ -103,6 +126,7 @@ extension BridgeServiceAppModel {
       agentModelRefreshErrorsByProvider = [:]
       agentModelCatalogGenerations = [:]
       agentModelCatalogScopes = [:]
+      agentModelCatalogLoadedProviders = []
       agentModelHydrationGenerations = [:]
       agentModelRefreshGenerations = [:]
       agentModelDefaultLoadGenerations = [:]
@@ -119,8 +143,10 @@ extension BridgeServiceAppModel {
       agentModelRefreshError = nil
       isManagingAgents = false
       tasks = []
+      closeWorkbenchPanes()
       approvals = []
       taskStartApprovalMode = "require"
+      projectWriteConcurrency = nil
       workbenchPermissionMode = "full"
       confirmedWorkbenchPermissionMode = "full"
       resolvingApprovalKeys = []
@@ -140,7 +166,7 @@ extension BridgeServiceAppModel {
       selectedProjectID = nil
       conversationPresentationCache.removeAll()
     } catch {
-      registrationStatus = registration.status
+      await resolveRegistrationStatus(reprobe: true)
       connectionState = .unavailable
       errorMessage = Self.message(error)
     }
@@ -149,17 +175,20 @@ extension BridgeServiceAppModel {
   func refresh(
     silent: Bool,
     includeCatalog: Bool,
-    forceCatalogRefresh: Bool = false
+    forceCatalogRefresh: Bool = false,
+    includeSettings: Bool = false
   ) async {
     guard !stopped else { return }
     if refreshInProgress {
       pendingRefresh = true
       pendingVisibleRefresh = pendingVisibleRefresh || !silent
       pendingCatalogRefresh = pendingCatalogRefresh || includeCatalog
+      pendingSettingsRefresh = pendingSettingsRefresh || includeSettings
       pendingForceCatalogRefresh = pendingForceCatalogRefresh || forceCatalogRefresh
       return
     }
-    registrationStatus = registration.status
+    await resolveRegistrationStatus()
+    guard !stopped else { return }
     guard registrationStatus == .enabled else {
       connectionState =
         registrationStatus == .requiresApproval
@@ -183,17 +212,27 @@ extension BridgeServiceAppModel {
       applyWorkbenchPermissionMode(refreshedStatus.workbenchPermissionMode)
       if connectionState != .connected { connectionState = .connected }
       if !silent { lastRefreshAt = Date() }
-      if !silent { errorMessage = nil }
+      if !silent, errorMessage != nil { errorMessage = nil }
       await refreshCollections(
         client: client,
         includeCatalog: includeCatalog,
         includeProjectResources: !silent,
-        forceCatalogRefresh: forceCatalogRefresh
+        forceCatalogRefresh: forceCatalogRefresh,
+        includeSettings: includeSettings
       )
     } catch {
-      await closeClient()
-      if connectionState != .unavailable { connectionState = .unavailable }
-      if !silent { errorMessage = Self.message(error) }
+      // A saturated service still answers (`busy`). Closing the client here would fail every
+      // in-flight request on the connection as "unavailable" although the service is healthy.
+      if BridgeServiceErrorMessage.remoteFailure(error)?.code != "busy" {
+        await closeClient()
+        let status = await resolveRegistrationStatus(reprobe: true)
+        let nextState: BridgeServiceConnectionState =
+          status == .requiresApproval ? .requiresApproval : .unavailable
+        if connectionState != nextState { connectionState = nextState }
+        if !silent, status != .requiresApproval { errorMessage = Self.message(error) }
+      } else if !silent {
+        errorMessage = Self.message(error)
+      }
     }
     refreshInProgress = false
     if !silent { isRefreshing = false }
@@ -204,15 +243,18 @@ extension BridgeServiceAppModel {
     guard pendingRefresh, !stopped else { return }
     let visible = pendingVisibleRefresh
     let includeCatalog = pendingCatalogRefresh
+    let includeSettings = pendingSettingsRefresh
     let forceCatalogRefresh = pendingForceCatalogRefresh
     pendingRefresh = false
     pendingVisibleRefresh = false
     pendingCatalogRefresh = false
+    pendingSettingsRefresh = false
     pendingForceCatalogRefresh = false
     await refresh(
       silent: !visible,
       includeCatalog: includeCatalog,
-      forceCatalogRefresh: forceCatalogRefresh
+      forceCatalogRefresh: forceCatalogRefresh,
+      includeSettings: includeSettings
     )
   }
 
@@ -295,18 +337,6 @@ extension BridgeServiceAppModel {
     )
   }
 
-  func updateWorkbenchProjectState(_ projectID: String?) {
-    guard let serviceStatus else { return }
-    self.serviceStatus = IPCServiceStatusResponse(
-      status: serviceStatus.status,
-      localMCPURL: serviceStatus.localMCPURL,
-      exposureMode: serviceStatus.exposureMode,
-      tunnel: serviceStatus.tunnel,
-      workbenchProjectID: projectID,
-      workbenchPermissionMode: serviceStatus.workbenchPermissionMode
-    )
-  }
-
   func updateWorkbenchPermissionModeState(_ mode: String) {
     guard let serviceStatus else { return }
     self.serviceStatus = IPCServiceStatusResponse(
@@ -321,13 +351,10 @@ extension BridgeServiceAppModel {
 
   func applyWorkbenchPermissionMode(_ mode: String?) {
     guard workbenchPermissionModeSyncTask == nil else { return }
-    guard let mode, mode == "read-only" || mode == "full" else {
-      workbenchPermissionMode = "full"
-      confirmedWorkbenchPermissionMode = "full"
-      return
-    }
-    workbenchPermissionMode = mode
-    confirmedWorkbenchPermissionMode = mode
+    var resolved = "full"
+    if let mode, mode == "read-only" || mode == "full" { resolved = mode }
+    if workbenchPermissionMode != resolved { workbenchPermissionMode = resolved }
+    confirmedWorkbenchPermissionMode = resolved
   }
 
   static func message(_ error: any Error) -> String {
@@ -337,6 +364,7 @@ extension BridgeServiceAppModel {
   func closeClient() async {
     cancelDeepSeekDesktopPairing()
     codexModelCatalogRequests.invalidate()
+    workbenchSettingsController.invalidate()
     stateChangesTask?.cancel()
     stateChangesTask = nil
     let current = client

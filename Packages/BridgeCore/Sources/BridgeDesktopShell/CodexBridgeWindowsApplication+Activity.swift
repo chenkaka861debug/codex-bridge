@@ -8,6 +8,7 @@
 
     static func updateWindowVisibility(_ visible: Bool, model: WindowsWorkbenchModel) {
       model.setWindowVisible(visible)
+      messageCenter?.setForegroundVisible(visible)
       guard visible != isWindowVisible else { return }
       isWindowVisible = visible
       isLongTermHidden = false
@@ -28,8 +29,9 @@
     }
 
     static func updateBrowserMemoryPolicy(model: WindowsWorkbenchModel) {
-      WindowsUIThread.shared.chatWebView()?.setLowMemoryUsage(
-        !model.isChatBrowserEnabled || isLongTermHidden)
+      guard let browser = WindowsUIThread.shared.chatWebView() else { return }
+      browser.setEnabled(model.isChatBrowserEnabled)
+      browser.setLowMemoryUsage(isLongTermHidden)
     }
 
     static func stopActivityScheduling() {

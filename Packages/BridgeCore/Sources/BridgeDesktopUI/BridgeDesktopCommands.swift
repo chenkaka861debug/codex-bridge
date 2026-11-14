@@ -9,6 +9,17 @@ public enum BridgeDesktopCommand: String, Codable, Sendable {
   case installAppUpdate
   case deferAppUpdate
   case cancelAppUpdate
+  case messageCenterRefresh
+  case messageCenterLoadMore
+  case messageCenterSetVisible
+  case messageCenterMarkRead
+  case messageCenterMarkAllRead
+  case messageCenterSubmitFeedback
+  case messageCenterReply
+  case messageCenterSelectAttachments
+  case messageCenterRemoveAttachment
+  case messageCenterPreviewAttachment
+  case messageCenterOpenAttachment
   case refreshModels
   case scanAgents
   case selectPage
@@ -19,6 +30,7 @@ public enum BridgeDesktopCommand: String, Codable, Sendable {
   case openLogs
   case openSystemSettings
   case openTask
+  case openWorkbenchSession
   case browserBack
   case browserForward
   case browserReload
@@ -33,6 +45,8 @@ public enum BridgeDesktopCommand: String, Codable, Sendable {
   case selectTask
   case refreshTasks
   case submitDSHTask
+  case submitAgentTask
+  case embeddedDSH
   case workbenchWorkspace
   case searchTaskHistory
   case selectTaskHistory
@@ -63,6 +77,7 @@ public enum BridgeDesktopCommand: String, Codable, Sendable {
   case setLogKindFilter
   case copyLogs
   case setMCPClientEnabled
+  case refreshMCPClients
   case setMCPClientExposure
   case copyMCPClientConfiguration
   case configureGeminiCloud
@@ -83,6 +98,7 @@ public enum BridgeDesktopCommand: String, Codable, Sendable {
   case beginAgentSetup
   case refreshAgentSetups
   case continueAgentSetup
+  case probeAgentSetupLogin
   case cancelAgentSetup
   case openAgentSetupLogin
   case connectAgent
@@ -112,6 +128,8 @@ public enum BridgeDesktopCommand: String, Codable, Sendable {
   case setFastMode
   case setDirectApprovalMode
   case setTaskStartApprovalMode
+  case setProjectWriteConcurrency
+  case setWorkbenchPanes
   case saveSettings
   case saveDirectConfiguration
   case checkDirectCommand
@@ -120,6 +138,7 @@ public enum BridgeDesktopCommand: String, Codable, Sendable {
   case registerService
   case unregisterService
   case setKeepServiceRunning
+  case setWorkbenchEnabled
   case updateBrowserViewport
   case dismissFeedback
 }
@@ -198,6 +217,8 @@ public struct BridgeDesktopCommandPayload: Codable, Equatable, Sendable {
   public let nodeExecutablePath: String?
   public let sdkRoot: String?
   public let viewport: BridgeDesktopBrowserViewport?
+  /// Split view: the latest task of each session shown in a pane.
+  public let taskIDs: [String]?
 
   public init(
     navigation: BridgeDesktopNavigation? = nil,
@@ -272,7 +293,8 @@ public struct BridgeDesktopCommandPayload: Codable, Equatable, Sendable {
     qoderDistribution: String? = nil,
     nodeExecutablePath: String? = nil,
     sdkRoot: String? = nil,
-    viewport: BridgeDesktopBrowserViewport? = nil
+    viewport: BridgeDesktopBrowserViewport? = nil,
+    taskIDs: [String]? = nil
   ) {
     self.navigation = navigation
     self.taskID = taskID
@@ -347,6 +369,7 @@ public struct BridgeDesktopCommandPayload: Codable, Equatable, Sendable {
     self.nodeExecutablePath = nodeExecutablePath
     self.sdkRoot = sdkRoot
     self.viewport = viewport
+    self.taskIDs = taskIDs
   }
 }
 

@@ -83,7 +83,7 @@ extension MCPSessionRegistry {
         requestTask: requestTask
       )
       let response = await withTaskCancellationHandler {
-        adaptingModernResponse(await requestTask.value, for: request)
+        addingModernResultFields(to: await requestTask.value, method: modernRequestMethod(request))
       } onCancel: {
         requestTask.cancel()
         Task { await createdServer.stop() }
@@ -196,25 +196,31 @@ extension MCPSessionRegistry {
     .error(statusCode: 400, .serverError(code: -32_020, message: message))
   }
 
-  func adaptingModernResponse(_ response: HTTPResponse, for request: HTTPRequest) -> HTTPResponse {
+  func modernRequestMethod(_ request: HTTPRequest) -> String? {
+    guard let body = request.body,
+      let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
+    else { return nil }
+    return object["method"] as? String
+  }
+
+  func addingModernResultFields(to response: HTTPResponse, method: String?) -> HTTPResponse {
     guard case .data(let data, let headers) = response,
       var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       var result = object["result"] as? [String: Any]
     else {
       return response
     }
-    // The vendored SDK emits legacy result objects. Only adapt successful
-    // modern responses, preserving any explicit multi-round-trip result type.
-    if result["resultType"] == nil { result["resultType"] = "complete" }
-    if result["resultType"] as? String == "complete",
-      let body = request.body,
-      let requestObject = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
-      let method = requestObject["method"] as? String,
-      ["tools/list", "prompts/list", "resources/list", "resources/templates/list", "resources/read"]
-        .contains(method)
-    {
-      if result["ttlMs"] == nil { result["ttlMs"] = 0 }
-      if result["cacheScope"] == nil { result["cacheScope"] = "private" }
+    result["resultType"] = result["resultType"] ?? "complete"
+    if result["resultType"] as? String == "complete" {
+      switch method {
+      case "server/discover", "tools/list", "prompts/list", "resources/list",
+        "resources/templates/list", "resources/read":
+        // Modern cacheable results require explicit freshness and authorization scope.
+        result["ttlMs"] = result["ttlMs"] ?? 0
+        result["cacheScope"] = result["cacheScope"] ?? "private"
+      default:
+        break
+      }
     }
     var metadata = result["_meta"] as? [String: Any] ?? [:]
     metadata["io.modelcontextprotocol/serverInfo"] = [
@@ -243,8 +249,6 @@ extension MCPSessionRegistry {
       + "executed on the user's machine after local approval."
     let result: [String: Any] = [
       "resultType": "complete",
-      "ttlMs": 0,
-      "cacheScope": "private",
       "supportedVersions": [Self.modernProtocolVersion, Version.latest],
       "capabilities": ["tools": [:], "resources": [:]],
       "_meta": [
@@ -263,6 +267,9 @@ extension MCPSessionRegistry {
     guard let data = try? JSONSerialization.data(withJSONObject: response) else {
       return .error(statusCode: 500, .internalError("Discovery encoding failed"))
     }
-    return .data(data, headers: [HTTPHeaderName.contentType: "application/json"])
+    return addingModernResultFields(
+      to: .data(data, headers: [HTTPHeaderName.contentType: "application/json"]),
+      method: "server/discover"
+    )
   }
 }

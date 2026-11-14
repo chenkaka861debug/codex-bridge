@@ -69,14 +69,14 @@ final class ModernResponsesTests: XCTestCase {
     let registry = registry()
     for method in ["tools/list", "prompts/list", "resources/list", "resources/templates/list", "resources/read"] {
       let body = try JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "id": 1, "result": [:]])
-      let response = await registry.adaptingModernResponse(.data(body), for: try request(method))
+      let response = await registry.addingModernResultFields(to: .data(body), method: method)
       let result = try XCTUnwrap(try json(response)["result"] as? [String: Any])
       XCTAssertEqual(result["ttlMs"] as? Int, 0, method)
       XCTAssertEqual(result["cacheScope"] as? String, "private", method)
     }
     for (method, resultType) in [("resources/read", "input_required"), ("tools/call", "complete")] {
       let body = try JSONSerialization.data(withJSONObject: ["jsonrpc": "2.0", "id": 1, "result": ["resultType": resultType]])
-      let response = await registry.adaptingModernResponse(.data(body), for: try request(method))
+      let response = await registry.addingModernResultFields(to: .data(body), method: method)
       let result = try XCTUnwrap(try json(response)["result"] as? [String: Any])
       XCTAssertEqual(result["resultType"] as? String, resultType)
       XCTAssertNil(result["ttlMs"])

@@ -1,3 +1,4 @@
+import BridgeServiceAppCore
 import Foundation
 
 public struct BridgeDesktopUIState: Codable, Equatable, Sendable {
@@ -6,6 +7,7 @@ public struct BridgeDesktopUIState: Codable, Equatable, Sendable {
   public let selectedNavigation: BridgeDesktopNavigation
   public let connectionLabel: String
   public let connectionTone: BridgeDesktopStatusTone
+  public let serviceConnected: Bool?
   public let isRefreshing: Bool
   public let feedback: BridgeDesktopFeedback?
   public let overview: BridgeDesktopOverviewState?
@@ -15,6 +17,7 @@ public struct BridgeDesktopUIState: Codable, Equatable, Sendable {
   public let connections: BridgeDesktopConnectionsState?
   public let settings: BridgeDesktopSettingsState?
   public let appUpdate: BridgeDesktopAppUpdateState?
+  public let messageCenter: MessageCenterState?
 
   public init(
     hostContext: BridgeDesktopHostContext? = nil,
@@ -22,6 +25,7 @@ public struct BridgeDesktopUIState: Codable, Equatable, Sendable {
     selectedNavigation: BridgeDesktopNavigation,
     connectionLabel: String,
     connectionTone: BridgeDesktopStatusTone,
+    serviceConnected: Bool? = nil,
     isRefreshing: Bool,
     feedback: BridgeDesktopFeedback? = nil,
     overview: BridgeDesktopOverviewState?,
@@ -30,13 +34,15 @@ public struct BridgeDesktopUIState: Codable, Equatable, Sendable {
     logs: BridgeDesktopLogsState? = nil,
     connections: BridgeDesktopConnectionsState? = nil,
     settings: BridgeDesktopSettingsState? = nil,
-    appUpdate: BridgeDesktopAppUpdateState? = nil
+    appUpdate: BridgeDesktopAppUpdateState? = nil,
+    messageCenter: MessageCenterState? = nil
   ) {
     self.hostContext = hostContext
     self.navigation = navigation
     self.selectedNavigation = selectedNavigation
     self.connectionLabel = connectionLabel
     self.connectionTone = connectionTone
+    self.serviceConnected = serviceConnected
     self.isRefreshing = isRefreshing
     self.feedback = feedback
     self.overview = overview
@@ -46,5 +52,6 @@ public struct BridgeDesktopUIState: Codable, Equatable, Sendable {
     self.connections = connections
     self.settings = settings
     self.appUpdate = appUpdate
+    self.messageCenter = messageCenter
   }
 }

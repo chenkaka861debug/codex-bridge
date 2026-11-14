@@ -24,7 +24,8 @@
       browserCanGoBack: Bool = false,
       browserCanGoForward: Bool = false,
       feedback: BridgeDesktopFeedback? = nil,
-      appUpdate: BridgeDesktopAppUpdateState? = nil
+      appUpdate: BridgeDesktopAppUpdateState? = nil,
+      messageCenter: MessageCenterState? = nil
     ) -> BridgeDesktopUIState {
       let startedAt = ContinuousClock.now
       let modelRefreshInProgress = settings?.isRefreshingModels == true
@@ -44,6 +45,7 @@
         selectedNavigation: selectedNavigation,
         connectionLabel: connectionLabel(for: workbench.connectionState),
         connectionTone: connectionTone(for: workbench.connectionState),
+        serviceConnected: workbench.connectionState == .connected,
         isRefreshing: isRefreshing,
         feedback: feedback,
         overview: pageCache.overview(
@@ -135,7 +137,8 @@
         ) {
           settingsPage(settings: settings, agentDefaults: agentDefaults)
         },
-        appUpdate: appUpdate
+        appUpdate: appUpdate,
+        messageCenter: messageCenter
       )
       ConversationPerformanceRecorder.shared.record(
         ConversationPerformanceSample(
